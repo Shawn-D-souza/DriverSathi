@@ -3,31 +3,34 @@ import { StyleSheet, Text, View, Button, Alert, AppState, Platform } from 'react
 import { supabase } from '../../lib/supabase';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
+import { useAuth } from '../../providers/AuthProvider';
 
 export default function HomeScreen() {
+  const { session } = useAuth();
   const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
   const [locationServicesEnabled, setLocationServicesEnabled] = useState(true);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [isTracking, setIsTracking] = useState(false);
-  
-  // Use a ref to hold the subscription object
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
   const checkLocationStatus = async () => {
     const { status } = await Location.getForegroundPermissionsAsync();
     setPermissionStatus(status);
-
     const providerStatus = await Location.getProviderStatusAsync();
     setLocationServicesEnabled(providerStatus.locationServicesEnabled);
-
     return { hasPermissions: status === 'granted', servicesEnabled: providerStatus.locationServicesEnabled };
   };
-  
-  // Function to start tracking location
+
   const startTracking = async () => {
     const { hasPermissions, servicesEnabled } = await checkLocationStatus();
     if (!hasPermissions || !servicesEnabled) {
       Alert.alert("Cannot Start Tracking", "Please grant location permissions and enable device location services.");
+      return;
+    }
+    if (!session?.user) {
+      Alert.alert("Error", "You must be logged in to start tracking.");
       return;
     }
 
@@ -35,17 +38,29 @@ export default function HomeScreen() {
     locationSubscription.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 5000, // Update every 5 seconds
-        distanceInterval: 1, // Update every 1 meter
+        timeInterval: 500,
+        distanceInterval: 1,
       },
-      (newLocation) => {
+      async (newLocation) => {
         setLocation(newLocation);
-        console.log('New location:', newLocation.coords);
+        
+        const { error } = await supabase.from('driver_locations').upsert({
+          user_id: session.user.id,
+          latitude: newLocation.coords.latitude,
+          longitude: newLocation.coords.longitude,
+        });
+
+        if (error) {
+          console.error('Error uploading location:', error.message);
+          setLastSync('Error');
+        } else {
+          setLastSync(new Date().toLocaleTimeString());
+          console.log('Location uploaded successfully');
+        }
       }
     );
   };
 
-  // Function to stop tracking location
   const stopTracking = () => {
     setIsTracking(false);
     if (locationSubscription.current) {
@@ -55,19 +70,13 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    checkLocationStatus(); // Initial check
-
-    // Listener to re-check when the user returns to the app
+    checkLocationStatus();
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        checkLocationStatus();
-      }
+      if (nextAppState === 'active') checkLocationStatus();
     });
-
-    // Cleanup subscription on component unmount
     return () => {
       appStateSubscription.remove();
-      stopTracking(); // Ensure tracking stops when the screen is left
+      stopTracking();
     };
   }, []);
 
@@ -84,38 +93,32 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Driver Control Panel</Text>
-
-      {/* Tracking Controls */}
       <View style={styles.trackingContainer}>
         <Text style={[styles.trackingStatus, { color: isTracking ? 'green' : 'red' }]}>
           {isTracking ? 'TRACKING ACTIVE' : 'TRACKING INACTIVE'}
         </Text>
         {!isTracking ? (
-            <Button title="Start Tracking" onPress={startTracking} disabled={!hasAllPermissions} />
+          <Button title="Start Tracking" onPress={startTracking} disabled={!hasAllPermissions} />
         ) : (
-            <Button title="Stop Tracking" onPress={stopTracking} color="red" />
+          <Button title="Stop Tracking" onPress={stopTracking} color="red" />
         )}
         {!hasAllPermissions && <Text style={styles.infoText}>Enable permissions below to start tracking.</Text>}
       </View>
 
-
-      {/* Display Location Coordinates */}
       {location && (
         <View style={styles.locationContainer}>
-          <Text style={styles.locationTitle}>Current Location:</Text>
+          <Text style={styles.locationTitle}>Live Data:</Text>
           <Text style={styles.locationText}>Latitude: {location.coords.latitude.toFixed(5)}</Text>
           <Text style={styles.locationText}>Longitude: {location.coords.longitude.toFixed(5)}</Text>
-          <Text style={styles.locationText}>Speed: {location.coords.speed ? (location.coords.speed * 3.6).toFixed(2) + ' km/h' : 'N/A'}</Text>
+          {lastSync && <Text style={styles.syncText}>Last Sync: {lastSync}</Text>}
         </View>
       )}
 
-      {/* Permissions Section */}
       <View style={styles.permissionsContainer}>
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>App Permission:</Text>
           {permissionStatus === 'granted' ? <Text style={[styles.statusValue, styles.granted]}>Granted</Text> : <Button title="Grant" onPress={() => Location.requestForegroundPermissionsAsync().then(checkLocationStatus)} />}
         </View>
-
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>Device Location:</Text>
           {locationServicesEnabled ? <Text style={[styles.statusValue, styles.granted]}>On</Text> : <Button title="Turn On" onPress={openSettings} />}
@@ -129,8 +132,6 @@ export default function HomeScreen() {
   );
 }
 
-
-// Add the new styles
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -183,6 +184,12 @@ const styles = StyleSheet.create({
     locationText: {
         fontSize: 16,
         marginBottom: 5,
+    },
+    syncText: {
+        fontSize: 14,
+        color: '#888',
+        marginTop: 10,
+        fontStyle: 'italic',
     },
     permissionsContainer: {
         width: '100%',
