@@ -1,50 +1,36 @@
-# Welcome to your Expo app 👋
+# **🚌 DriverSathi: A Real-Time Location App**
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This repository contains the official source code for **DriverSathi**, the essential driver companion application for a real-time transport tracking platform.
 
-## Get started
+## **The Vision: Revolutionizing Transport**
 
-1. Install dependencies
+This project is aimed at solving a critical problem in cities across India: the lack of reliable, real-time information for public bus transport. The mission is to empower commuters with the data they need to travel with confidence and efficiency.
 
-   ```bash
-   npm install
-   ```
+DriverSathi is the core component of the data collection system. It enables authorized bus drivers to securely and seamlessly broadcast their vehicle's location, powering the live map for a main passenger app.
 
-2. Start the app
+## **🚀 Project Status**
 
-   ```bash
-   npx expo start
-   ```
+This project is in **active development**. This repository serves as a showcase for the application's architecture, code quality, and technical implementation.
 
-In the output, you'll find options to open the app in a
+## **✨ Core Features**
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+* \[ \] **Secure Driver Authentication:** Only authorized drivers can log in and broadcast data, powered by Supabase Auth.  
+* \[ \] **Real-time GPS Broadcasting:** Efficiently sends location updates to the backend to power the live passenger map.  
+* \[ \] **Simple Start/Stop Controls:** A minimal, user-friendly interface that allows drivers to control their tracking status with a single tap, minimizing distraction.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## **🛠️ Technology Stack**
 
-## Get a fresh project
+This application is built using a modern, scalable, and cross-platform technology stack to ensure rapid development and a high-quality user experience.
 
-When you're ready, run:
+* **Framework:** [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/)  
+* **Backend:** [Supabase](https://supabase.com/) (Authentication & Real-time PostgreSQL Database)  
+* **Language:** [TypeScript](https://www.typescriptlang.org/)  
+* **Navigation:** [React Navigation](https://reactnavigation.org/)
 
-```bash
-npm run reset-project
-```
+## **©️ Copyright & Licensing**
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+**© 2025 Shawn Dsouza. All Rights Reserved.**
 
-## Learn more
+This is a proprietary software. The code in this repository is not open source and is the exclusive intellectual property of Shawn Dsouza.
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Reproduction, distribution, or modification of this code is strictly prohibited without prior written permission. Please see the LICENSE file for more details.
