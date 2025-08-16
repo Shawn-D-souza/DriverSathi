@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, TextInput, Button, Alert, Text } from 'react-native';
+import { supabase } from '../../lib/supabase'; // Import the supabase client
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -8,8 +9,15 @@ const Login = () => {
 
   async function signInWithEmail() {
     setLoading(true);
-    // We will add the Supabase logic here in the next step.
-    Alert.alert('Login Info', `Email: ${email}\nPassword: ${password}`);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    }
+    // We will add navigation logic here in a future step
     setLoading(false);
   }
 
@@ -34,7 +42,7 @@ const Login = () => {
       <Button
         title={loading ? 'Loading...' : 'Sign In'}
         onPress={signInWithEmail}
-        disabled={loading}
+        disabled={loading || !email || !password}
       />
     </View>
   );
