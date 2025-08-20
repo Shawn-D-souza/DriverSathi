@@ -1,20 +1,74 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Button, Alert, AppState, Platform } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
+import * as TaskManager from 'expo-task-manager';
 import { useAuth } from '../../providers/AuthProvider';
+
+const LOCATION_TASK_NAME = 'background-location-task';
+
+/**
+ * Defines the background task for location tracking. This must be in the global scope.
+ * It fetches the user session and driver info to upload location data to Supabase.
+ */
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error('TaskManager Error:', error.message);
+    return;
+  }
+  if (data) {
+    const { locations } = data as { locations: Location.LocationObject[] };
+    const location = locations[0];
+    if (!location) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+
+    const { data: driver, error: driverError } = await supabase
+      .from('drivers')
+      .select('bus_id')
+      .eq('id', session.user.id)
+      .single();
+
+    if (driverError || !driver) {
+      console.error('TaskManager: Could not fetch driver info.');
+      return;
+    }
+
+    const { error: uploadError } = await supabase.from('bus_locations').upsert({
+      bus_id: driver.bus_id,
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    }, { onConflict: 'bus_id' });
+
+    if (uploadError) {
+      console.error('TaskManager: Failed to upload location.', uploadError.message);
+    } else {
+      console.log('TaskManager: Location update sent.');
+    }
+  }
+});
 
 export default function HomeScreen() {
   const { session } = useAuth();
   const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
   const [locationServicesEnabled, setLocationServicesEnabled] = useState(true);
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [isTracking, setIsTracking] = useState(false);
-  const [lastSync, setLastSync] = useState<string | null>(null);
   const [driver, setDriver] = useState<{ bus_id: string } | null>(null);
 
-  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const checkPermissionsAndStatus = async () => {
+    const { status } = await Location.getBackgroundPermissionsAsync();
+    setPermissionStatus(status);
+
+    const providerStatus = await Location.getProviderStatusAsync();
+    setLocationServicesEnabled(providerStatus.locationServicesEnabled);
+
+    if (status === 'granted') {
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      setIsTracking(hasStarted);
+    }
+  };
 
   useEffect(() => {
     if (session) {
@@ -25,94 +79,65 @@ export default function HomeScreen() {
           .eq('id', session.user.id)
           .single();
 
-        if (error) {
-          Alert.alert('Error fetching driver data', error.message);
-        } else if (data) {
-          setDriver(data);
-        }
+        if (error) Alert.alert('Error fetching driver data', error.message);
+        else if (data) setDriver(data);
       };
       fetchDriverInfo();
+      checkPermissionsAndStatus();
     }
   }, [session]);
 
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkPermissionsAndStatus();
+      }
+    });
+    return () => appStateSubscription.remove();
+  }, []);
 
-  const checkLocationStatus = async () => {
-    const { status } = await Location.getForegroundPermissionsAsync();
-    setPermissionStatus(status);
-    const providerStatus = await Location.getProviderStatusAsync();
-    setLocationServicesEnabled(providerStatus.locationServicesEnabled);
-    return { hasPermissions: status === 'granted', servicesEnabled: providerStatus.locationServicesEnabled };
+  const requestPermissions = async () => {
+    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+    if (foregroundStatus !== 'granted') {
+      Alert.alert('Permission Denied', 'Foreground location access is required to continue.');
+      setPermissionStatus(foregroundStatus);
+      return;
+    }
+
+    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+    if (backgroundStatus !== 'granted') {
+      Alert.alert('Permission Denied', 'Background location access must be granted to track location when the app is not active.');
+    }
+    setPermissionStatus(backgroundStatus);
   };
 
   const startTracking = async () => {
-    const { hasPermissions, servicesEnabled } = await checkLocationStatus();
-    if (!hasPermissions || !servicesEnabled) {
-      Alert.alert("Cannot Start Tracking", "Please grant location permissions and enable device location services.");
-      return;
-    }
-    if (!session?.user) {
-      Alert.alert("Error", "You must be logged in to start tracking.");
-      return;
-    }
     if (!driver?.bus_id) {
-      Alert.alert("Error", "You are not assigned to a bus. Please contact support.");
+      Alert.alert("Error", "Cannot start tracking: Driver not assigned to a bus.");
       return;
     }
-
     setIsTracking(true);
-    locationSubscription.current = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 500,
-        distanceInterval: 1,
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: 500,
+      distanceInterval: 0,
+      showsBackgroundLocationIndicator: true,
+      foregroundService: {
+        notificationTitle: "DriverSathi is Active",
+        notificationBody: "Live location tracking is running.",
+        notificationColor: "#3366FF",
       },
-      async (newLocation) => {
-        setLocation(newLocation);
-
-        const { error } = await supabase.from('bus_locations').upsert({
-          bus_id: driver.bus_id,
-          latitude: newLocation.coords.latitude,
-          longitude: newLocation.coords.longitude,
-        }, {
-          onConflict: 'bus_id'
-        });
-
-        if (error) {
-          console.error('Error uploading location:', error.message);
-          setLastSync('Error');
-        } else {
-          setLastSync(new Date().toLocaleTimeString());
-          console.log('Location uploaded successfully');
-        }
-      }
-    );
-  };
-
-  const stopTracking = () => {
-    setIsTracking(false);
-    if (locationSubscription.current) {
-      locationSubscription.current.remove();
-      locationSubscription.current = null;
-    }
-  };
-
-  useEffect(() => {
-    checkLocationStatus();
-    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') checkLocationStatus();
     });
-    return () => {
-      appStateSubscription.remove();
-      stopTracking();
-    };
-  }, []);
+  };
+
+  const stopTracking = async () => {
+    setIsTracking(false);
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+  };
 
   const openSettings = () => {
-    if (Platform.OS === 'ios') {
-      Linking.openURL('app-settings:');
-    } else {
-      Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
-    }
+    if (Platform.OS === 'ios') Linking.openURL('app-settings:');
+    else Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
   };
 
   const hasAllPermissions = permissionStatus === 'granted' && locationServicesEnabled;
@@ -120,6 +145,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Driver Control Panel</Text>
+      
       <View style={styles.trackingContainer}>
         <Text style={[styles.trackingStatus, { color: isTracking ? 'green' : 'red' }]}>
           {isTracking ? 'TRACKING ACTIVE' : 'TRACKING INACTIVE'}
@@ -132,23 +158,20 @@ export default function HomeScreen() {
         {!hasAllPermissions && <Text style={styles.infoText}>Enable permissions below to start tracking.</Text>}
       </View>
 
-      {location && (
-        <View style={styles.locationContainer}>
-          <Text style={styles.locationTitle}>Live Data:</Text>
-          <Text style={styles.locationText}>Latitude: {location.coords.latitude.toFixed(5)}</Text>
-          <Text style={styles.locationText}>Longitude: {location.coords.longitude.toFixed(5)}</Text>
-          {lastSync && <Text style={styles.syncText}>Last Sync: {lastSync}</Text>}
-        </View>
-      )}
-
       <View style={styles.permissionsContainer}>
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>App Permission:</Text>
-          {permissionStatus === 'granted' ? <Text style={[styles.statusValue, styles.granted]}>Granted</Text> : <Button title="Grant" onPress={() => Location.requestForegroundPermissionsAsync().then(checkLocationStatus)} />}
+          {permissionStatus === 'granted' 
+            ? <Text style={[styles.statusValue, styles.granted]}>Granted</Text> 
+            : <Button title="Grant" onPress={requestPermissions} />
+          }
         </View>
         <View style={styles.statusBox}>
           <Text style={styles.statusText}>Device Location:</Text>
-          {locationServicesEnabled ? <Text style={[styles.statusValue, styles.granted]}>On</Text> : <Button title="Turn On" onPress={openSettings} />}
+          {locationServicesEnabled 
+            ? <Text style={[styles.statusValue, styles.granted]}>On</Text> 
+            : <Button title="Turn On" onPress={openSettings} />
+          }
         </View>
       </View>
 
@@ -191,37 +214,16 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 15,
     },
-    locationContainer: {
+    permissionsContainer: {
         width: '100%',
         padding: 15,
         backgroundColor: '#fff',
         borderRadius: 10,
-        marginBottom: 20,
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
-    },
-    locationTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginBottom: 5,
-    },
-    locationText: {
-        fontSize: 16,
-        marginBottom: 5,
-    },
-    syncText: {
-        fontSize: 14,
-        color: '#888',
-        marginTop: 10,
-        fontStyle: 'italic',
-    },
-    permissionsContainer: {
-        width: '100%',
-        marginTop: 'auto',
-        marginBottom: 100,
     },
     statusBox: {
         flexDirection: 'row',
