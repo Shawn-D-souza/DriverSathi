@@ -19,8 +19,22 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     const location = locations[0];
     if (!location) return;
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
+    let { data: { session } } = await supabase.auth.getSession();
+
+    // If the session is missing or expired, attempt to refresh it.
+    if (!session || (session.expires_at && session.expires_at * 1000 < Date.now())) {
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.session) {
+        console.error('TaskManager: Failed to refresh session.', refreshError?.message);
+        return;
+      }
+      session = refreshData.session;
+    }
+    
+    if (!session?.user) {
+        console.error('TaskManager: No user session available.');
+        return;
+    }
 
     const { data: driver, error: driverError } = await supabase
       .from('drivers')
@@ -29,7 +43,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       .single();
 
     if (driverError || !driver) {
-      console.error('TaskManager: Could not fetch driver info.');
+      console.error('TaskManager: Could not fetch driver info.', driverError?.message);
       return;
     }
 
@@ -56,6 +70,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
 
   const checkPermissionsAndStatus = async () => {
+    setLoading(true);
     const { status } = await Location.getBackgroundPermissionsAsync();
     setPermissionStatus(status);
 
@@ -82,8 +97,8 @@ export default function HomeScreen() {
         else if (data) setDriver(data);
       };
       fetchDriverInfo();
-      checkPermissionsAndStatus();
     }
+    checkPermissionsAndStatus();
   }, [session]);
 
   useEffect(() => {
@@ -115,7 +130,6 @@ export default function HomeScreen() {
       Alert.alert("Error", "Cannot start tracking: Driver not assigned to a bus.");
       return;
     }
-    setIsTracking(true);
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       accuracy: Location.Accuracy.BestForNavigation,
       timeInterval: 500,
@@ -127,11 +141,12 @@ export default function HomeScreen() {
         notificationColor: "#3366FF",
       },
     });
+    setIsTracking(true);
   };
 
   const stopTracking = async () => {
-    setIsTracking(false);
     await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    setIsTracking(false);
   };
 
   const openSettings = () => {
