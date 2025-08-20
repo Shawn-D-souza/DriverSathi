@@ -15,8 +15,8 @@ This project is in **active development**. This repository serves as a showcase 
 ## **✨ Core Features**
 
 * \[x] **Secure Driver Authentication:** Only authorized drivers can log in and broadcast data, powered by Supabase Auth.  
-* \[ \] **Real-time GPS Broadcasting:** Efficiently sends location updates to the backend to power the live passenger map.  
-* \[ \] **Simple Start/Stop Controls:** A minimal, user-friendly interface that allows drivers to control their tracking status with a single tap, minimizing distraction.
+* \[x\] **Real-time GPS Broadcasting:** Efficiently sends location updates to the backend to power the live passenger map.  
+* \[x\] **Simple Start/Stop Controls:** A minimal, user-friendly interface that allows drivers to control their tracking status with a single tap, minimizing distraction.
 
 ## **🛠️ Technology Stack**
 
