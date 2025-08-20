@@ -12,8 +12,29 @@ export default function HomeScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [isTracking, setIsTracking] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [driver, setDriver] = useState<{ bus_id: string } | null>(null);
 
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+
+  useEffect(() => {
+    if (session) {
+      const fetchDriverInfo = async () => {
+        const { data, error } = await supabase
+          .from('drivers')
+          .select('bus_id')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          Alert.alert('Error fetching driver data', error.message);
+        } else if (data) {
+          setDriver(data);
+        }
+      };
+      fetchDriverInfo();
+    }
+  }, [session]);
+
 
   const checkLocationStatus = async () => {
     const { status } = await Location.getForegroundPermissionsAsync();
@@ -33,6 +54,10 @@ export default function HomeScreen() {
       Alert.alert("Error", "You must be logged in to start tracking.");
       return;
     }
+    if (!driver?.bus_id) {
+      Alert.alert("Error", "You are not assigned to a bus. Please contact support.");
+      return;
+    }
 
     setIsTracking(true);
     locationSubscription.current = await Location.watchPositionAsync(
@@ -43,11 +68,13 @@ export default function HomeScreen() {
       },
       async (newLocation) => {
         setLocation(newLocation);
-        
-        const { error } = await supabase.from('driver_locations').upsert({
-          user_id: session.user.id,
+
+        const { error } = await supabase.from('bus_locations').upsert({
+          bus_id: driver.bus_id,
           latitude: newLocation.coords.latitude,
           longitude: newLocation.coords.longitude,
+        }, {
+          onConflict: 'bus_id'
         });
 
         if (error) {
