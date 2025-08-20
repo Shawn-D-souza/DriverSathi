@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (session && inAuthGroup) {
       // Redirect authenticated users from auth screens to the home screen
-      router.replace('/(tabs)');
+      router.replace('/');
     } else if (!session && !inAuthGroup) {
       // Redirect unauthenticated users to the login screen
       router.replace('/(auth)/login');

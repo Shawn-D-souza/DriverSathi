@@ -1,17 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Button, Alert, AppState, Platform } from 'react-native';
-import { supabase } from '../../lib/supabase';
+import { StyleSheet, Text, View, Button, Alert, AppState, Platform, ActivityIndicator } from 'react-native';
+import { supabase } from '../lib/supabase';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import * as TaskManager from 'expo-task-manager';
-import { useAuth } from '../../providers/AuthProvider';
+import { useAuth } from '../providers/AuthProvider';
+import { FontAwesome } from '@expo/vector-icons';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 
-/**
- * Defines the background task for location tracking. This must be in the global scope.
- * It fetches the user session and driver info to upload location data to Supabase.
- */
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error('TaskManager Error:', error.message);
@@ -56,6 +53,7 @@ export default function HomeScreen() {
   const [locationServicesEnabled, setLocationServicesEnabled] = useState(true);
   const [isTracking, setIsTracking] = useState(false);
   const [driver, setDriver] = useState<{ bus_id: string } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const checkPermissionsAndStatus = async () => {
     const { status } = await Location.getBackgroundPermissionsAsync();
@@ -68,6 +66,7 @@ export default function HomeScreen() {
       const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
       setIsTracking(hasStarted);
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -140,43 +139,48 @@ export default function HomeScreen() {
     else Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
   };
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   const hasAllPermissions = permissionStatus === 'granted' && locationServicesEnabled;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Driver Control Panel</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Control Panel</Text>
+        <Button title="Sign Out" onPress={() => supabase.auth.signOut()} color="#c0392b" />
+      </View>
       
-      <View style={styles.trackingContainer}>
-        <Text style={[styles.trackingStatus, { color: isTracking ? 'green' : 'red' }]}>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Tracking Status</Text>
+        <Text style={[styles.trackingStatus, { color: isTracking ? '#4CAF50' : '#F44336' }]}>
           {isTracking ? 'TRACKING ACTIVE' : 'TRACKING INACTIVE'}
         </Text>
         {!isTracking ? (
           <Button title="Start Tracking" onPress={startTracking} disabled={!hasAllPermissions} />
         ) : (
-          <Button title="Stop Tracking" onPress={stopTracking} color="red" />
+          <Button title="Stop Tracking" onPress={stopTracking} color="#F44336" />
         )}
         {!hasAllPermissions && <Text style={styles.infoText}>Enable permissions below to start tracking.</Text>}
       </View>
 
-      <View style={styles.permissionsContainer}>
-        <View style={styles.statusBox}>
-          <Text style={styles.statusText}>App Permission:</Text>
-          {permissionStatus === 'granted' 
-            ? <Text style={[styles.statusValue, styles.granted]}>Granted</Text> 
-            : <Button title="Grant" onPress={requestPermissions} />
-          }
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Permissions</Text>
+        <View style={styles.permissionRow}>
+          <FontAwesome name={permissionStatus === 'granted' ? 'check-circle' : 'times-circle'} size={24} color={permissionStatus === 'granted' ? '#4CAF50' : '#F44336'} />
+          <Text style={styles.permissionText}>App Permission</Text>
+          {permissionStatus !== 'granted' && <Button title="Grant" onPress={requestPermissions} />}
         </View>
-        <View style={styles.statusBox}>
-          <Text style={styles.statusText}>Device Location:</Text>
-          {locationServicesEnabled 
-            ? <Text style={[styles.statusValue, styles.granted]}>On</Text> 
-            : <Button title="Turn On" onPress={openSettings} />
-          }
+        <View style={styles.permissionRow}>
+          <FontAwesome name={locationServicesEnabled ? 'check-circle' : 'times-circle'} size={24} color={locationServicesEnabled ? '#4CAF50' : '#F44336'} />
+          <Text style={styles.permissionText}>Device Location</Text>
+          {!locationServicesEnabled && <Button title="Turn On" onPress={openSettings} />}
         </View>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <Button title="Sign Out" onPress={() => supabase.auth.signOut()} />
       </View>
     </View>
   );
@@ -186,70 +190,62 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'flex-start',
         paddingTop: 60,
         paddingHorizontal: 20,
         backgroundColor: '#f5f5f5',
     },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 20,
+    header: {
+        width: '100%',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 30,
     },
-    trackingContainer: {
+    title: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    card: {
         width: '100%',
         padding: 20,
         backgroundColor: '#fff',
         borderRadius: 10,
-        alignItems: 'center',
         marginBottom: 20,
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
+    },
+    cardTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      marginBottom: 15,
+      color: '#333',
     },
     trackingStatus: {
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 15,
+        textAlign: 'center'
     },
-    permissionsContainer: {
-        width: '100%',
-        padding: 15,
-        backgroundColor: '#fff',
-        borderRadius: 10,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-    },
-    statusBox: {
+    permissionRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        justifyContent: 'space-between',
         paddingVertical: 10,
     },
-    statusText: {
-        fontSize: 16,
-    },
-    statusValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    granted: {
-        color: 'green',
+    permissionText: {
+      flex: 1,
+      marginLeft: 15,
+      fontSize: 16,
+      color: '#333'
     },
     infoText: {
-        marginTop: 10,
+        marginTop: 15,
         fontSize: 12,
         color: '#666',
         textAlign: 'center',
-    },
-    buttonContainer: {
-        position: 'absolute',
-        bottom: 40,
-        width: '90%',
     },
 });
