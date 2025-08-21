@@ -1,5 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Button, Alert, AppState, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  Button, 
+  Alert, 
+  AppState, 
+  Platform, 
+  ActivityIndicator 
+} from 'react-native';
 import { supabase } from '../lib/supabase';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
@@ -8,6 +17,16 @@ import { useAuth } from '../providers/AuthProvider';
 import { FontAwesome } from '@expo/vector-icons';
 
 const LOCATION_TASK_NAME = 'background-location-task';
+
+type DriverProfile = {
+  bus_id: string;
+  name: string;
+  is_active: boolean;
+  buses: {
+    bus_name: string;
+    plate_number: string;
+  } | null;
+};
 
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
@@ -21,7 +40,6 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 
     let { data: { session } } = await supabase.auth.getSession();
 
-    // If the session is missing or expired, attempt to refresh it.
     if (!session || (session.expires_at && session.expires_at * 1000 < Date.now())) {
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError || !refreshData.session) {
@@ -66,11 +84,10 @@ export default function HomeScreen() {
   const [permissionStatus, setPermissionStatus] = useState<Location.PermissionStatus | null>(null);
   const [locationServicesEnabled, setLocationServicesEnabled] = useState(true);
   const [isTracking, setIsTracking] = useState(false);
-  const [driver, setDriver] = useState<{ bus_id: string } | null>(null);
+  const [driver, setDriver] = useState<DriverProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkPermissionsAndStatus = async () => {
-    setLoading(true);
+  const checkPermissionsAndStatus = useCallback(async () => {
     const { status } = await Location.getBackgroundPermissionsAsync();
     setPermissionStatus(status);
 
@@ -81,25 +98,40 @@ export default function HomeScreen() {
       const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
       setIsTracking(hasStarted);
     }
-    setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    if (session) {
-      const fetchDriverInfo = async () => {
-        const { data, error } = await supabase
-          .from('drivers')
-          .select('bus_id')
-          .eq('id', session.user.id)
-          .single();
+    const fetchInitialData = async () => {
+      setLoading(true);
+      if (session) {
+        try {
+          const { data, error } = await supabase
+            .from('drivers')
+            .select(`
+              bus_id,
+              name,
+              is_active,
+              buses!inner (
+                bus_name,
+                plate_number
+              )
+            `)
+            .eq('id', session.user.id)
+            .single();
 
-        if (error) Alert.alert('Error fetching driver data', error.message);
-        else if (data) setDriver(data);
-      };
-      fetchDriverInfo();
-    }
-    checkPermissionsAndStatus();
-  }, [session]);
+          if (error) throw error;
+          if (data) setDriver(data as unknown as DriverProfile);
+
+        } catch (error: any) {
+          Alert.alert('Error', `Failed to fetch driver data: ${error.message}`);
+        }
+      }
+      await checkPermissionsAndStatus();
+      setLoading(false);
+    };
+
+    fetchInitialData();
+  }, [session, checkPermissionsAndStatus]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
@@ -108,7 +140,7 @@ export default function HomeScreen() {
       }
     });
     return () => appStateSubscription.remove();
-  }, []);
+  }, [checkPermissionsAndStatus]);
 
   const requestPermissions = async () => {
     const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
@@ -128,6 +160,10 @@ export default function HomeScreen() {
   const startTracking = async () => {
     if (!driver?.bus_id) {
       Alert.alert("Error", "Cannot start tracking: Driver not assigned to a bus.");
+      return;
+    }
+    if (!driver.is_active) {
+      Alert.alert("Account Inactive", "Your account is currently inactive. Please contact an administrator.");
       return;
     }
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
@@ -163,6 +199,7 @@ export default function HomeScreen() {
   }
 
   const hasAllPermissions = permissionStatus === 'granted' && locationServicesEnabled;
+  const canStartTracking = hasAllPermissions && driver?.is_active;
 
   return (
     <View style={styles.container}>
@@ -172,16 +209,42 @@ export default function HomeScreen() {
       </View>
       
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Driver Details</Text>
+        {driver ? (
+          <>
+            <View style={styles.detailRow}>
+              <FontAwesome name="user" size={16} style={styles.icon} />
+              <Text style={styles.detailText}>Name: {driver.name}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <FontAwesome name="bus" size={16} style={styles.icon} />
+              <Text style={styles.detailText}>Bus: {driver.buses?.bus_name || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <FontAwesome name="vcard" size={16} style={styles.icon} />
+              <Text style={styles.detailText}>Plate: {driver.buses?.plate_number || 'N/A'}</Text>
+            </View>
+             <View style={styles.detailRow}>
+              <FontAwesome name={driver.is_active ? 'check-circle' : 'times-circle'} size={16} style={[styles.icon, { color: driver.is_active ? '#4CAF50' : '#F44336' }]} />
+              <Text style={styles.detailText}>Status: {driver.is_active ? 'Active' : 'Inactive'}</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.infoText}>Could not load driver details.</Text>
+        )}
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>Tracking Status</Text>
         <Text style={[styles.trackingStatus, { color: isTracking ? '#4CAF50' : '#F44336' }]}>
           {isTracking ? 'TRACKING ACTIVE' : 'TRACKING INACTIVE'}
         </Text>
         {!isTracking ? (
-          <Button title="Start Tracking" onPress={startTracking} disabled={!hasAllPermissions} />
+          <Button title="Start Tracking" onPress={startTracking} disabled={!canStartTracking} />
         ) : (
           <Button title="Stop Tracking" onPress={stopTracking} color="#F44336" />
         )}
-        {!hasAllPermissions && <Text style={styles.infoText}>Enable permissions below to start tracking.</Text>}
+        {!canStartTracking && <Text style={styles.infoText}>Enable permissions and ensure your account is active to start tracking.</Text>}
       </View>
 
       <View style={styles.card}>
@@ -262,5 +325,19 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#666',
         textAlign: 'center',
+    },
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    detailText: {
+      fontSize: 16,
+      color: '#333',
+    },
+    icon: {
+      marginRight: 10,
+      width: 20,
+      textAlign: 'center',
     },
 });
