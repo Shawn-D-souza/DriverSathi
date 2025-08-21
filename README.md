@@ -14,9 +14,12 @@ This project is in **active development**. This repository serves as a showcase 
 
 ## **✨ Core Features**
 
-* \[x] **Secure Driver Authentication:** Only authorized drivers can log in and broadcast data, powered by Supabase Auth.  
-* \[x\] **Real-time GPS Broadcasting:** Efficiently sends location updates to the backend to power the live passenger map.  
-* \[x\] **Simple Start/Stop Controls:** A minimal, user-friendly interface that allows drivers to control their tracking status with a single tap, minimizing distraction.
+* **Secure Driver Authentication:** Only authorized drivers can log in and broadcast data, powered by Supabase Auth.  
+* **Real-time GPS Broadcasting:** Efficiently sends location updates to the backend to power the live passenger map.  
+* **Background Location Tracking:** The app can track the driver's location even when the app is in the background, ensuring a continuous stream of data.  
+* **Simple Start/Stop Controls:** A minimal, user-friendly interface that allows drivers to control their tracking status with a single tap, minimizing distraction.  
+* **Driver and Bus Details:** The app displays the driver's name, bus name, and plate number, so they can easily verify their details.  
+* **Permissions Management:** The app guides the user to grant the necessary location permissions to ensure proper functionality.
 
 ## **🛠️ Technology Stack**
 
@@ -24,8 +27,7 @@ This application is built using a modern, scalable, and cross-platform technolog
 
 * **Framework:** [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/)  
 * **Backend:** [Supabase](https://supabase.com/) (Authentication & Real-time PostgreSQL Database)  
-* **Language:** [TypeScript](https://www.typescriptlang.org/)  
-* **Navigation:** [React Navigation](https://reactnavigation.org/)
+* **Language:** [TypeScript](https://www.typescriptlang.org/)
 
 ## **©️ Copyright & Licensing**
 
