@@ -181,8 +181,6 @@ export default function HomeScreen() {
       // Persist the busId to AsyncStorage so the background task can access it.
       await AsyncStorage.setItem(BUS_ID_STORAGE_KEY, driver.bus_id);
       
-      // NOTE: A 1-second interval is highly battery-intensive and may increase database costs.
-      // For production, an interval between 5000ms (5s) and 10000ms (10s) is recommended.
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
         accuracy: Location.Accuracy.BestForNavigation,
         timeInterval: 1000, // 1 second
