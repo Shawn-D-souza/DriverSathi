@@ -15,8 +15,10 @@ import * as Linking from 'expo-linking';
 import * as TaskManager from 'expo-task-manager';
 import { useAuth } from '../providers/AuthProvider';
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LOCATION_TASK_NAME = 'background-location-task';
+const BUS_ID_STORAGE_KEY = 'background_location_bus_id';
 
 type DriverProfile = {
   bus_id: string;
@@ -28,56 +30,49 @@ type DriverProfile = {
   } | null;
 };
 
+/**
+ * Defines the background task for location tracking.
+ * This task retrieves the bus ID from AsyncStorage and uploads the latest location
+ * data to the Supabase 'bus_locations' table.
+ */
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
-    console.error('TaskManager Error:', error.message);
+    console.error('[DriverSathi BackgroundTask] TaskManager error:', error.message);
     return;
   }
+  
   if (data) {
     const { locations } = data as { locations: Location.LocationObject[] };
+    if (!locations || locations.length === 0) {
+      return; // No location data, do nothing.
+    }
     const location = locations[0];
-    if (!location) return;
-
-    let { data: { session } } = await supabase.auth.getSession();
-
-    if (!session || (session.expires_at && session.expires_at * 1000 < Date.now())) {
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !refreshData.session) {
-        console.error('TaskManager: Failed to refresh session.', refreshError?.message);
+    
+    try {
+      const busId = await AsyncStorage.getItem(BUS_ID_STORAGE_KEY);
+      if (!busId) {
+        // This can happen if the task is restarted by the OS after being killed.
+        // Stop the task to prevent errors until the user restarts it from the app.
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
         return;
       }
-      session = refreshData.session;
-    }
-    
-    if (!session?.user) {
-        console.error('TaskManager: No user session available.');
-        return;
-    }
 
-    const { data: driver, error: driverError } = await supabase
-      .from('drivers')
-      .select('bus_id')
-      .eq('id', session.user.id)
-      .single();
+      const { error: uploadError } = await supabase.from('bus_locations').upsert({
+        bus_id: busId,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      }, { onConflict: 'bus_id' });
 
-    if (driverError || !driver) {
-      console.error('TaskManager: Could not fetch driver info.', driverError?.message);
-      return;
-    }
+      if (uploadError) {
+        console.error('[DriverSathi BackgroundTask] Supabase upload error:', uploadError.message);
+      }
 
-    const { error: uploadError } = await supabase.from('bus_locations').upsert({
-      bus_id: driver.bus_id,
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    }, { onConflict: 'bus_id' });
-
-    if (uploadError) {
-      console.error('TaskManager: Failed to upload location.', uploadError.message);
-    } else {
-      console.log('TaskManager: Location update sent.');
+    } catch (e: any) {
+      console.error('[DriverSathi BackgroundTask] An unexpected error occurred:', e.message);
     }
   }
 });
+
 
 export default function HomeScreen() {
   const { session } = useAuth();
@@ -87,6 +82,9 @@ export default function HomeScreen() {
   const [driver, setDriver] = useState<DriverProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Checks for location permissions and whether the background task is already running.
+   */
   const checkPermissionsAndStatus = useCallback(async () => {
     const { status } = await Location.getBackgroundPermissionsAsync();
     setPermissionStatus(status);
@@ -100,6 +98,9 @@ export default function HomeScreen() {
     }
   }, []);
 
+  /**
+   * Fetches initial driver data and checks permissions on component mount.
+   */
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
@@ -133,6 +134,9 @@ export default function HomeScreen() {
     fetchInitialData();
   }, [session, checkPermissionsAndStatus]);
 
+  /**
+   * Re-checks permissions when the app becomes active.
+   */
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
@@ -142,6 +146,9 @@ export default function HomeScreen() {
     return () => appStateSubscription.remove();
   }, [checkPermissionsAndStatus]);
 
+  /**
+   * Requests foreground and background location permissions from the user.
+   */
   const requestPermissions = async () => {
     const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
     if (foregroundStatus !== 'granted') {
@@ -157,30 +164,29 @@ export default function HomeScreen() {
     setPermissionStatus(backgroundStatus);
   };
 
+  /**
+   * Starts the background location tracking task.
+   */
   const startTracking = async () => {
-    // Debug: Log the entire driver object to see all its properties
-    console.log('Driver object:', JSON.stringify(driver, null, 2));
-
     if (!driver?.bus_id) {
-      // Debug: Log if the bus_id is missing
-      console.log('startTracking failed: Driver not assigned to a bus.');
       Alert.alert("Error", "Cannot start tracking: Driver not assigned to a bus.");
       return;
     }
     if (!driver.is_active) {
-      // Debug: Log if the driver is inactive
-      console.log('startTracking failed: Account is inactive.');
       Alert.alert("Account Inactive", "Your account is currently inactive. Please contact an administrator.");
       return;
     }
 
     try {
-      // Debug: Log before starting location updates
-      console.log('Attempting to start location updates...');
+      // Persist the busId to AsyncStorage so the background task can access it.
+      await AsyncStorage.setItem(BUS_ID_STORAGE_KEY, driver.bus_id);
+      
+      // NOTE: A 1-second interval is highly battery-intensive and may increase database costs.
+      // For production, an interval between 5000ms (5s) and 10000ms (10s) is recommended.
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 500,
-        distanceInterval: 0,
+        timeInterval: 1000, // 1 second
+        distanceInterval: 0, // Update regardless of distance
         showsBackgroundLocationIndicator: true,
         foregroundService: {
           notificationTitle: "DriverSathi is Active",
@@ -189,20 +195,28 @@ export default function HomeScreen() {
         },
       });
       setIsTracking(true);
-      // Debug: Log on successful start
-      console.log('Location updates started successfully.');
-    } catch (error) {
-      // Debug: Log any error that occurs during the process
+    } catch (error: any) {
       console.error('Failed to start location updates:', error);
-      Alert.alert("Error", "Could not start tracking. Please check the console for more details.");
+      Alert.alert("Error", `Could not start tracking: ${error.message}`);
     }
   };
 
+  /**
+   * Stops the background location tracking task.
+   */
   const stopTracking = async () => {
-    await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (hasStarted) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    }
+    // Clean up the stored busId from AsyncStorage.
+    await AsyncStorage.removeItem(BUS_ID_STORAGE_KEY);
     setIsTracking(false);
   };
 
+  /**
+   * Opens the device's location settings screen.
+   */
   const openSettings = () => {
     if (Platform.OS === 'ios') Linking.openURL('app-settings:');
     else Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
@@ -211,7 +225,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#3366FF" />
       </View>
     );
   }
