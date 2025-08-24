@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  Button, 
-  Alert, 
-  AppState, 
-  Platform, 
-  ActivityIndicator 
+import {
+  StyleSheet,
+  Text,
+  View,
+  Button,
+  Alert,
+  AppState,
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import * as Location from 'expo-location';
@@ -158,26 +158,44 @@ export default function HomeScreen() {
   };
 
   const startTracking = async () => {
+    // Debug: Log the entire driver object to see all its properties
+    console.log('Driver object:', JSON.stringify(driver, null, 2));
+
     if (!driver?.bus_id) {
+      // Debug: Log if the bus_id is missing
+      console.log('startTracking failed: Driver not assigned to a bus.');
       Alert.alert("Error", "Cannot start tracking: Driver not assigned to a bus.");
       return;
     }
     if (!driver.is_active) {
+      // Debug: Log if the driver is inactive
+      console.log('startTracking failed: Account is inactive.');
       Alert.alert("Account Inactive", "Your account is currently inactive. Please contact an administrator.");
       return;
     }
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 500,
-      distanceInterval: 0,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: "DriverSathi is Active",
-        notificationBody: "Live location tracking is running.",
-        notificationColor: "#3366FF",
-      },
-    });
-    setIsTracking(true);
+
+    try {
+      // Debug: Log before starting location updates
+      console.log('Attempting to start location updates...');
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 500,
+        distanceInterval: 0,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "DriverSathi is Active",
+          notificationBody: "Live location tracking is running.",
+          notificationColor: "#3366FF",
+        },
+      });
+      setIsTracking(true);
+      // Debug: Log on successful start
+      console.log('Location updates started successfully.');
+    } catch (error) {
+      // Debug: Log any error that occurs during the process
+      console.error('Failed to start location updates:', error);
+      Alert.alert("Error", "Could not start tracking. Please check the console for more details.");
+    }
   };
 
   const stopTracking = async () => {

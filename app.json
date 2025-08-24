@@ -24,8 +24,10 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
-      ]
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
+      ],
+      "package": "com.shawndsouz.DriverSathi"
     },
     "web": {
       "bundler": "metro",
@@ -47,6 +49,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "edce84a4-47df-4245-a136-1ca94e347e35"
+      }
     }
   }
 }
