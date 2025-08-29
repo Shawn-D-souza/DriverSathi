@@ -1,50 +1,55 @@
-# Welcome to your Expo app 👋
+# **DriverSathi: Real-Time Location Tracking App**
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## **Project Overview**
 
-## Get started
+DriverSathi is a mobile application built with Expo that enables real-time geographic location tracking for drivers. The app is designed to periodically send location data to a Supabase backend, even when running in the background.
 
-1. Install dependencies
+### **Core Technologies**
 
-   ```bash
+* **Frontend:** React Native (Expo)  
+* **Backend:** Supabase  
+* **Authentication:** Supabase Auth
+
+## **Minimum Viable Product (MVP) Features**
+
+* **User Authentication:** Simple sign-in functionality for a single driver.  
+* **Location Permissions:** Professional handling of user permissions for location access.  
+* **Real-Time Tracking:** Captures the driver's latitude and longitude at set intervals once tracking is enabled.  
+* **Background Updates:** Sends location updates to the backend, even when the app is not in the foreground.
+
+## **Prerequisites**
+
+* Node.js and npm (or yarn) installed  
+* Expo CLI installed (npm install \-g expo-cli)  
+* A Supabase project set up
+
+## **Getting Started**
+
+1. **Clone the repository:**  
+   git clone https://github.com/your-username/DriverSathi.git
+
+2. **Install dependencies:**  
    npm install
-   ```
 
-2. Start the app
+3. **Configure Supabase:**  
+   * Create a .env file in the root of the project.  
+   * Add your Supabase URL and anon key to the .env file:  
+     EXPO\_PUBLIC\_SUPABASE\_URL=YOUR\_SUPABASE\_URL  
+     EXPO\_PUBLIC\_SUPABASE\_ANON\_KEY=YOUR\_SUPABASE\_ANON\_KEY
 
-   ```bash
+4. **Start the development server:**  
    npx expo start
-   ```
 
-In the output, you'll find options to open the app in a
+## **Project Structure**
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+.  
+├── app/              \# Main application code  
+├── assets/           \# Images, fonts, and other static assets  
+├── components/       \# Reusable components  
+├── constants/        \# App-wide constants  
+├── scripts/          \# Utility scripts  
+└── app.json          \# Expo configuration
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## **License**
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project is proprietary and not open-source. All rights are reserved.
